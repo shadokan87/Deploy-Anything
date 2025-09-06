@@ -1,6 +1,14 @@
 // Import the Vercel SDK
 import { Vercel } from "@vercel/sdk";
 import { error } from "console";
+const CreateDeploymentStatus = {
+  Canceled: "CANCELED",
+  Error: "ERROR",
+  Queued: "QUEUED",
+  Building: "BUILDING",
+  Initializing: "INITIALIZING",
+  Ready: "READY",
+} as const;
 
 // You may want to load these from environment variables in production
 const vercelToken = "8BswdY4GSIDPHv5983GJ5M8O";
@@ -20,14 +28,14 @@ async function createAndCheckDeployment() {
                     type: "github",
                     repo: "Deploy-Anything",
                     ref: "main",
-                    org: "shadokan87",
-                },
-                projectSettings: {
-                    framework: "nextjs",
-                    buildCommand: "npm run build",
-                    outputDirectory: ".next",
-                    installCommand: "npm install",
-                },
+                    org: "afuma",
+                }
+                // projectSettings: {
+                //     framework: "nextjs",
+                //     buildCommand: "npm run build",
+                //     outputDirectory: ".next",
+                //     installCommand: "npm install",
+                // },
             },
         });
 
@@ -40,9 +48,10 @@ async function createAndCheckDeployment() {
         let deploymentStatus = createResponse.status;
         let deploymentURL = createResponse.url;
         while (
-            deploymentStatus === "BUILDING" ||
-            deploymentStatus === "INITIALIZING"
+            deploymentStatus != CreateDeploymentStatus.Error
         ) {
+            if (deploymentStatus == CreateDeploymentStatus.Ready)
+                break ;
             await new Promise((resolve) => setTimeout(resolve, 5000));
             const statusResponse = await vercel.deployments.getDeployment({
                 idOrUrl: deploymentId,

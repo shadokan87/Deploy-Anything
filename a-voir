@@ -1,0 +1,82 @@
+voir comment faire au niveau des capaciter de la VM par exemple 2coeurs a 8Go, si c'est une application de machine learning qui demande 4coeurs et 16Go de RAM
+=> decrire comment l'IA choisis quelle provider utiliser ?
+et donner un prix + une commission pour remunerer la plateforme deployAnything..
+
+voir si blackbox detient cette solution, comment ca l'aide..
+Axes d'ameliorations, creer un compte sur deployAnithing
+
+
+--------------
+
+pour vercel et github
+Peut-on connecter un repo GitHub à Vercel et donner les permissions via une API ?
+
+Connexion initiale de GitHub à Vercel doit se faire via l’interface utilisateur pour des raisons de sécurité et de consentement explicite (standard OAuth2 de GitHub).
+👉 Il n’existe pas d’endpoint API Vercel permettant de donner ces permissions OAuth via code.
+
+⚙️ Ce que l’API Vercel permet de faire :
+
+Une fois que GitHub est connecté manuellement via l’interface, alors oui, l'API Vercel permet de :
+
+✅ Créer un projet (/v9/projects)
+✅ Lier un dépôt GitHub existant au projet
+✅ Définir les paramètres de build
+✅ Déployer manuellement un projet
+✅ Gérer les variables d’environnement
+✅ Supprimer ou modifier un projet
+✅ Lire l’état des déploiements
+
+=> donc avoir un repo de l'agent IA qui clone les repo ou les forks et puissent les deployer de facon automatique sur vercel
+authenticifaton entre vercel et gihtub a faire une seule fois coter backend.. donc super pour l'utilisateur qui n'a rien a faire!
+donner toutes les permissions a tous les repositories
+par contre je me demande si c'est une bonne pratique ou la seule pratique possible d'avoir un repo github avec pleins de forks.. apres ils sont fixes et peuvent fonctionner du coup haha!
+
+dans create_response pour l'api de vercel checker quelle est la branche principale du code: main/master ou autres... ou vide peut etre le repo... ?
+
+exemple:
+🔍 Tu veux aller plus loin ?
+
+Dis-moi ce que tu veux concrètement déployer :
+Un site statique HTML ?
+Une app React ?
+Une app Next.js ?
+Un backend Python ?
+Un outil dev interne ?
+
+par exemple vercel ne permet pas d'executer une fonction en cli directement (cf:test-hackathon-0)
+on doit avoir un shema particulier pour que ca fonctionne:
+
+
+avoir l'API github de configurer et l'agent IA qui nous fait ca propre:
+        // Create a new deployment from GitHub repo
+        const createResponse = await vercel.deployments.createDeployment({
+            requestBody: {
+                name: "my-web-app",
+                target: "production",
+                gitSource: {
+                    type: "github",
+                    repo: "test-hackathon",
+                    ref: "main",
+                    org: "afuma",
+                },
+                projectSettings: {
+                    framework: "nextjs",
+                    buildCommand: "npm run build",
+                    outputDirectory: ".next",
+                    installCommand: "npm install",
+                },
+            },
+        });
+
+Dire a l'agent de: (voir ce que l'on veut mettre en place)
+    - Creer un readme pour plus de lisibilibite
+    - Ecrire de la documentation
+    - Rendre executatbloe ou deployable
+    - Installler les dependances etc..
+
+
+---------------------------------------------------------------
+
+
+oauth github a faire... pour authentifier lutilisateur depuis notre application deployAnything pour avoir les acces et permissions pour deployer sur Vercel,
+faire pull request, creer des branches etc.. pull, fetch, remove..
