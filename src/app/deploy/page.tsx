@@ -2,7 +2,7 @@
 import { signOut, useSession } from "next-auth/react";
 import AuthButton from "../components/AuthButton";
 import Flex from "@/components/Flex";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Else, If, Then, When } from "react-if";
 import { ModeToggle } from "../components/ModeToggle";
 import { Button } from "@/components/ui/button";
@@ -86,12 +86,34 @@ export default function Deploy() {
   const [repoUrl, setRepoUrl] = useState("");
   const [repoError, setRepoError] = useState<string | null>(null);
   const [loadingHint, setLoadingHint] = useState<"none" | "diag">("none");
+  const [vercelToken, setVercelToken] = useState("");
+  const [deploymentStatus, setDeploymentStatus] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const isCompleteRef = useRef(false);
+
+  // Cleanup EventSource on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
 
   const handleRepoSubmit = () => {
-    if (loadingHint != "none" || state.diagState?.complete == true)
+    if (loadingHint != "none" || isCompleteRef.current)
       return;
+    
+    // Close any existing EventSource
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    
     const _url = repoUrl;
     setLoadingHint("diag");
+    isCompleteRef.current = false;
+    
     try {
       // Extract org and repo name from the GitHub URL
       const match = _url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/);
@@ -101,35 +123,78 @@ export default function Deploy() {
         return;
       }
       setState((prev) => {
-        return { ...prev, step: "diag" }
+        return { ...prev, step: "diag", diagState: undefined }
       });
       const org = match[1];
       const name = match[2];
 
       const eventSource = new EventSource(`http://localhost:3000/api/repoDiagnostic?org=${org}&name=${name}&access_token=${accessToken}`);
+      eventSourceRef.current = eventSource;
 
       eventSource.onmessage = (event) => {
-        if (state.diagState?.complete == true) {
-          if (!eventSource.CLOSED)
-            eventSource.close();
-          return ;
+        // Check ref instead of state to avoid stale closure
+        if (isCompleteRef.current) {
+          console.log("Already complete, ignoring message");
+          eventSource.close();
+          return;
         }
+        
+        console.log("Received EventSource message:", event.data);
         const diagState = JSON.parse(event.data) as RepoDiagnosticState;
-        if (diagState["complete"] && diagState["complete"] == true) {
+        
+        if (diagState.complete) {
+          console.log("Diagnostic complete, closing EventSource");
+          isCompleteRef.current = true;
           setLoadingHint("none");
+          eventSource.close();
+          eventSourceRef.current = null;
         }
+        
         setState((prev) => {
           return { ...prev, diagState };
         });
       };
 
-    } finally {
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        eventSource.close();
+        eventSourceRef.current = null;
+        setLoadingHint("none");
+      };
+
+    } catch (error) {
+      console.error('Error setting up EventSource:', error);
+      setLoadingHint("none");
     }
-    // setTimeout(() => {
-    //   setLoadingHint("none");
-    //   alert(repoUrl);
-    //   // Empty submit handler as requested
-    // }, 1000);
+  };
+
+  const handleVercelDeploy = async () => {
+    if (!vercelToken || !repoUrl) return;
+
+    setDeploymentStatus("Deploying...");
+    
+    try {
+      const response = await fetch('/api/deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          repoUrl,
+          vercelToken,
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setDeploymentStatus(`Deployment successful! URL: ${result.url}`);
+      } else {
+        setDeploymentStatus(`Deployment failed: ${result.error}`);
+      }
+    } catch (error) {
+      setDeploymentStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const validateRepo = (url: string) => {
@@ -146,7 +211,7 @@ export default function Deploy() {
   };
   const chat = () => {
     return (
-      <Flex col gap={4} className="flex-1 overflow-hidden flex-wrap">
+      <Flex col gap={4} className="flex-1 overflow-auto flex-wrap">
         <If condition={state.step == "idle"}>
           <Then>
             <div className="space-y-4 w-full mx-auto">
@@ -185,23 +250,61 @@ export default function Deploy() {
           <Else>
             <If condition={state.diagState != undefined}>
               <Then>
-                <p className="whitespace-nowrap text-xl font-semibold">{"We're analyzing your repository, hang tight !"}</p>
-                {(() => {
-                  const lastMessage = state.diagState?.agentState?.conversation.at(-1);
-                  console.log("__LAST__", lastMessage);
-                  if (lastMessage?.role == "assistant" && typeof lastMessage.content == "string" && lastMessage.content.length > 0) {
-                    console.log("__CONTENT__", lastMessage.content);
-                    return <p className="font-semibold opacity-50">
-                      {lastMessage.content}
-                    </p>
-                  }
-                })()}
-                {/* {state.diagState?.agentState?.conversation.map(message => {
-                  if (message.role == "assistant") {
-                    return <p className=""></>
-                  }
-                })} */}
-                {/* {JSON.stringify(state.diagState, null, 2)} */}
+                <If condition={state.diagState?.complete === true || state.diagState?.success == true}>
+                  <Then>
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <h2 className="text-xl font-semibold">Repository Analysis Complete</h2>
+                        <div className="bg-muted p-4 rounded-lg">
+                          <pre className="text-sm whitespace-pre-wrap">
+                            {state.diagState ? JSON.stringify(state.diagState, null, 2).slice(1, -1) : 'No data available'}
+                          </pre>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold">Deploy to Vercel</h3>
+                        <div className="space-y-2">
+                          <label htmlFor="vercel-token" className="text-sm font-medium">
+                            Vercel Access Token
+                          </label>
+                          <Input
+                            id="vercel-token"
+                            type="password"
+                            placeholder="Enter your Vercel access token"
+                            value={vercelToken}
+                            onChange={(e) => setVercelToken(e.target.value)}
+                          />
+                        </div>
+                        <Button 
+                          onClick={handleVercelDeploy}
+                          disabled={!vercelToken || deploymentStatus === "Deploying..."}
+                          className="w-full"
+                        >
+                          Deploy to Vercel
+                        </Button>
+                        {deploymentStatus && (
+                          <div className="p-4 bg-muted rounded-lg">
+                            <p className="text-sm">{deploymentStatus}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Then>
+                  <Else>
+                    <p className="whitespace-nowrap text-xl font-semibold">{"We're analyzing your repository, hang tight !"}</p>
+                    {(() => {
+                      const lastMessage = state.diagState?.agentState?.conversation.at(-1);
+                      console.log("__LAST__", lastMessage);
+                      if (lastMessage?.role == "assistant" && typeof lastMessage.content == "string" && lastMessage.content.length > 0) {
+                        console.log("__CONTENT__", lastMessage.content);
+                        return <p className="font-semibold opacity-50">
+                          {lastMessage.content}
+                        </p>
+                      }
+                    })()}
+                  </Else>
+                </If>
               </Then>
             </If>
           </Else>
