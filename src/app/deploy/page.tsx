@@ -110,9 +110,15 @@ export default function Deploy() {
       const eventSource = new EventSource(`http://localhost:3000/api/repoDiagnostic?org=${org}&name=${name}&access_token=${accessToken}`);
 
       eventSource.onmessage = (event) => {
+        if (state.diagState?.complete == true) {
+          if (!eventSource.CLOSED)
+            eventSource.close();
+          return ;
+        }
         const diagState = JSON.parse(event.data) as RepoDiagnosticState;
-        if (diagState["complete"] && diagState["complete"] == true)
+        if (diagState["complete"] && diagState["complete"] == true) {
           setLoadingHint("none");
+        }
         setState((prev) => {
           return { ...prev, diagState };
         });
