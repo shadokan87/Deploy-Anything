@@ -106,7 +106,6 @@ export default function Deploy() {
       const org = match[1];
       const name = match[2];
 
-      console.log("++++++++++++++++++ INIT EVENT SOURCE");
       const eventSource = new EventSource(`http://localhost:3000/api/repoDiagnostic?org=${org}&name=${name}&access_token=${accessToken}`);
 
       eventSource.onmessage = (event) => {
